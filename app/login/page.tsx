@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function LoginPage() {
@@ -9,6 +9,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,18 +17,23 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (error) throw error;
-      
-      // Hard redirect to dashboard
-      window.location.href = '/dashboard';
-      
+      if (!resp.ok) {
+        const payload = await resp.json().catch(() => ({}));
+        throw new Error(payload?.error || 'Login failed');
+      }
+
+      // Server set the auth cookie; navigate to dashboard
+      router.push('/dashboard');
     } catch (error: any) {
-      setError(error.message);
+      console.error('Login error:', error?.message ?? error);
+      setError(error?.message ?? 'An unknown error occurred');
+    } finally {
       setLoading(false);
     }
   };
@@ -52,23 +58,29 @@ export default function LoginPage() {
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
-              required
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-purple-200/50 focus:outline-none focus:border-purple-400"
+              id="email"
+                name="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                required
+                autoComplete="email"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-purple-200/50 focus:outline-none focus:border-purple-400"
             />
           </div>
           
           <div>
             <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              required
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-purple-200/50 focus:outline-none focus:border-purple-400"
+              id="password"
+                name="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                required
+                autoComplete="current-password"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-purple-200/50 focus:outline-none focus:border-purple-400"
             />
           </div>
           
@@ -87,6 +99,16 @@ export default function LoginPage() {
             Sign up
           </Link>
         </p>
+
+        {/* Demo mode link (optional) */}
+        <div className="mt-6 pt-6 border-t border-white/10">
+          <Link 
+            href="/demo"
+            className="block w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-center transition-all"
+          >
+            Continue to Demo Mode →
+          </Link>
+        </div>
       </div>
     </div>
   );
