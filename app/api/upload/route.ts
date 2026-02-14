@@ -76,7 +76,6 @@ export async function POST(req: Request) {
           .from('document_chunks')
           .insert({
             document_id: document.id,
-            chunk_index: i,
             content: textChunks[i],
             created_at: new Date().toISOString()
           })
