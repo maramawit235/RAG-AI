@@ -77,6 +77,44 @@ export default function ChatPage() {
     }
   };
 
+  // --- Upload handlers ---
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploading(true);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      console.log('Upload response', data);
+
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: `Uploaded "${file.name}" — ${data.message || 'processed'}` },
+      ]);
+    } catch (err) {
+      console.error('Upload failed', err);
+      setMessages(prev => [...prev, { role: 'assistant', content: `Upload failed: ${String(err)}` }]);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDriveClick = () => {
+    setMessages(prev => [...prev, { role: 'assistant', content: 'Google Drive picker not configured. Implement OAuth and Drive picker to enable this.' }]);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#2D2B55] via-[#4B4485] to-[#786DB5] font-sans text-white">
       {/* Navigation */}
@@ -189,22 +227,51 @@ export default function ChatPage() {
 
           {/* Input Area */}
           <div className="p-6 border-t border-white/10 bg-white/5">
-            <form onSubmit={handleSubmit} className="flex gap-3">
+            <form onSubmit={handleSubmit} className="flex gap-3 items-center">
+              <button
+                type="button"
+                onClick={handleUploadClick}
+                disabled={uploading}
+                className="p-3 bg-white/5 rounded-xl hover:bg-white/10"
+                aria-label="Upload file"
+              >
+                📎
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDriveClick}
+                disabled={uploading}
+                className="p-3 bg-white/5 rounded-xl hover:bg-white/10"
+                aria-label="Upload from Google Drive"
+              >
+                🟢
+              </button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileChange}
+                accept=".pdf,.docx,.txt,.md,.csv,.jpg,.png"
+                hidden
+              />
+
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask a question about your documents..."
                 className="flex-1 px-6 py-4 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400 text-white placeholder-purple-200/50 transition-all"
-                disabled={isLoading}
+                disabled={isLoading || uploading}
               />
+
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || uploading}
                 className="px-6 py-4 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
               >
                 <SendIcon />
-                <span className="hidden sm:inline">Send</span>
+                <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Send'}</span>
               </button>
             </form>
           </div>

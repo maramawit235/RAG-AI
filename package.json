@@ -17,6 +17,7 @@
     "@supabase/supabase-js": "^2.95.3",
     "@thednp/dommatrix": "^3.0.2",
     "dotenv": "^17.3.1",
+    "lucide-react": "^0.564.0",
     "mammoth": "^1.11.0",
     "next": "16.1.6",
     "openai": "^6.21.0",

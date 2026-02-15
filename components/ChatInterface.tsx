@@ -16,6 +16,8 @@ export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [documents, setDocuments] = useState<Array<{id:string; file_name?:string; title?:string;}>>([]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -25,6 +27,21 @@ export default function ChatInterface() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    // load recent documents for selector
+    const load = async () => {
+      try {
+        const res = await fetch('/api/documents');
+        const json = await res.json();
+        setDocuments(json.documents || []);
+        if (json.documents && json.documents.length > 0) setSelectedDocumentId(json.documents[0].id);
+      } catch (e) {
+        console.error('Failed to load documents', e);
+      }
+    };
+    load();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +56,7 @@ export default function ChatInterface() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, userMessage] }),
+        body: JSON.stringify({ messages: [...messages, userMessage], selectedDocumentId }),
       });
 
       const data = await response.json();
@@ -53,6 +70,75 @@ export default function ChatInterface() {
       console.error('Chat error:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // --- Upload handlers ---
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploading(true);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      console.log('Upload response', data);
+
+      // Refresh documents list and select the newly uploaded document if returned
+      if (data?.documentId) {
+        try {
+          const docsRes = await fetch('/api/documents');
+          const docsJson = await docsRes.json();
+          setDocuments(docsJson.documents || []);
+          setSelectedDocumentId(data.documentId);
+        } catch (e) {
+          console.error('Failed to refresh documents after upload', e);
+        }
+      }
+
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: `Uploaded "${file.name}" — ${data.message || 'processed'}` },
+      ]);
+    } catch (err) {
+      console.error('Upload failed', err);
+      setMessages(prev => [...prev, { role: 'assistant', content: `Upload failed: ${String(err)}` }]);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // Google Drive picker stub — requires gapi + picker setup on the page
+  const handleDriveClick = () => {
+    if (!(window as any).gapi || !(window as any).google) {
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            'Google Drive picker not loaded. Add the Google API script and implement a server-side proxy to fetch Drive files.',
+        },
+      ]);
+      return;
+    }
+
+    try {
+      (window as any).gapi.load('picker', () => {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Drive picker opened (stub).' }]);
+      });
+    } catch (e) {
+      console.error('Drive picker error', e);
     }
   };
 
@@ -126,21 +212,69 @@ export default function ChatInterface() {
 
       {/* Input */}
       <form onSubmit={handleSubmit} className="border-t p-4 bg-white rounded-b-lg">
-        <div className="flex space-x-2">
+        <div className="flex items-center space-x-2">
+          {/* Upload (local) button */}
+          <button
+            type="button"
+            onClick={handleUploadClick}
+            disabled={uploading}
+            aria-label="Upload file"
+            className="p-2 rounded hover:bg-gray-100"
+          >
+            📎
+          </button>
+
+          {/* Google Drive (stub) */}
+          <button
+            type="button"
+            onClick={handleDriveClick}
+            disabled={uploading}
+            aria-label="Upload from Google Drive"
+            className="p-2 rounded hover:bg-gray-100"
+          >
+            🟢
+          </button>
+
+          {/* Hidden file input */}
           <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileChange}
+            accept=".pdf,.docx,.txt,.md,.csv,.jpg,.png"
+            hidden
+            aria-hidden
+          />
+
+          {/* Text input */}
+          <div className="flex items-center space-x-2">
+            <select
+              value={selectedDocumentId || ''}
+              onChange={(e) => setSelectedDocumentId(e.target.value || null)}
+              className="p-2 border rounded-lg bg-white mr-2"
+            >
+              {documents.length === 0 && <option value="">No documents</option>}
+              {documents.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.file_name || d.title || d.id}
+                </option>
+              ))}
+            </select>
+
+            <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask a question about your documents..."
             className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={isLoading}
+            disabled={isLoading || uploading}
           />
+          </div>
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || uploading}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Send
+            {uploading ? 'Uploading...' : 'Send'}
           </button>
         </div>
       </form>
